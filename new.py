@@ -1,76 +1,46 @@
-import streamlit as st
-import csv
+from flask import Flask, render_template, request, redirect, url_for, flash
+from flask_sqlalchemy import SQLAlchemy
 
-# Define the path to the CSV file
-CSV_FILE = "tasks.csv"
+app = Flask(__name__)
+app.secret_key = 'your_secret_key_here'
 
-# Define the main function
-def main():
-    # Set the title of the web app
-    st.title("To-Do List")
-    st.markdown(
-         f"""
-         <style>
-         .stApp {{
-             background-image: url("https://images.pexels.com/photos/2387793/pexels-photo-2387793.jpeg?cs=srgb&dl=pexels-adrien-olichon-2387793.jpg&fm=jpg");
-             background-attachment: fixed;
-             background-size: cover
-         }}
-         </style>
-         """,
-         unsafe_allow_html=True
-     )
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///features.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-    # Load the tasks from the CSV file
-    task_list = load_tasks()
+db = SQLAlchemy(app)
 
-    # Add a form to input new tasks
-    task_input = st.text_input("Add a new task:")
-    if st.button("Add"):
-        if task_input != "":
-            # Add the new task to the list and save it to the CSV file
-            task_list.append(task_input)
-            save_tasks(task_list)
-            task_input = ""
-            display(task_list)
+class Feature(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text, nullable=False)
 
-    
+with app.app_context():
+    db.create_all()
+    if Feature.query.count() == 0:
+        db.session.bulk_save_objects([
+            Feature(name="Responsive Design", description="Mobile-friendly layouts with Bootstrap."),
+            Feature(name="Dynamic Content", description="Features loaded from database."),
+            Feature(name="Custom Styling", description="SCSS compiled to CSS."),
+        ])
+        db.session.commit()
 
-    # Add a button to clear the task list
-    if st.button("Clear all tasks"):
-        # Clear the task list and save the changes to the CSV file
-        task_list.clear()
-        save_tasks(task_list)
-        display(task_list)        
+@app.route("/", methods=["GET", "POST"])
+def index():
+    if request.method == "POST":
+        name = request.form.get("name")
+        description = request.form.get("description")
 
-def load_tasks():
-    """
-    Load the tasks from the CSV file.
-    """
-    try:
-        with open(CSV_FILE, "r") as f:
-            reader = csv.reader(f)
-            task_list = [row[0] for row in reader]
-    except FileNotFoundError:
-        task_list = []
-    return task_list
-def display(task_list):
-    # Display the current tasks
-    if len(task_list) == 0:
-        st.write("No tasks added yet.")
-    else:
-        st.write("Current tasks:")
-        for i, task in enumerate(task_list):
-            st.write(f"{i+1}. {task}")
-def save_tasks(task_list):
-    """
-    Save the tasks to the CSV file.
-    """
-    with open(CSV_FILE, "w", newline="") as f:
-        f.truncate(0)
-        writer = csv.writer(f)
-        writer.writerows([[task] for task in task_list])
+        if not name or not description:
+            flash("Both fields are required.", "danger")
+        else:
+            db.session.add(Feature(name=name, description=description))
+            db.session.commit()
+            flash("Feature added successfully!", "success")
 
-# Run the app
+        return redirect(url_for("index"))
+
+    features = Feature.query.all()
+    return render_template("index.html", features=features)
+
 if __name__ == "__main__":
-    main()
+    app.run(debug=True)
